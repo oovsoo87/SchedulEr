@@ -25,6 +25,7 @@ dependencies:
   archive: ^3.5.1
   file_picker: ^8.0.5
   fl_chart: ^0.68.0
+  in_app_purchase: ^3.2.3
 
 dev_dependencies:
   flutter_test:
