@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:scheduler/models.dart';
+import 'package:scheduler/providers/plan_provider.dart';
 import 'package:scheduler/widgets/custom_app_bar.dart';
+import 'package:scheduler/widgets/upgrade_dialog.dart';
 
 final staffProvider = StateNotifierProvider<StaffNotifier, List<Staff>>((ref) {
   return StaffNotifier();
@@ -117,7 +119,20 @@ class AddStaffScreen extends ConsumerWidget {
         },
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () => _showAddEditStaffDialog(context, ref),
+        onPressed: () {
+          final isPro = ref.read(planProvider);
+          final staffCount = ref.read(staffProvider).length;
+
+          if (!isPro && staffCount >= 5) {
+            showUpgradeDialog(
+              context,
+              title: "Upgrade to Pro for Unlimited Employees",
+              message: "You've reached the 5-employee limit on Scheduler Lite. Upgrade to Pro to add unlimited employees, unlock detailed reports, and get priority support.",
+            );
+          } else {
+            _showAddEditStaffDialog(context, ref);
+          }
+        },
         child: const Icon(Icons.add),
       ),
     );

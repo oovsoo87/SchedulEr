@@ -6,8 +6,10 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:scheduler/home_screen.dart';
 import 'package:scheduler/models.dart';
+import 'package:scheduler/providers/plan_provider.dart';
 import 'package:scheduler/site_screen.dart';
 import 'package:scheduler/widgets/custom_app_bar.dart';
+import 'package:scheduler/widgets/upgrade_dialog.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:fl_chart/fl_chart.dart';
 
@@ -251,7 +253,24 @@ class TableView extends ConsumerWidget {
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
           ElevatedButton(
             onPressed: () {
+              final isPro = ref.read(planProvider);
               final hours = double.tryParse(hoursController.text) ?? 0.0;
+              final isNewProjection = currentHours == 0.0 && hours > 0.0;
+
+              if (!isPro && isNewProjection) {
+                final allProjections = ref.read(siteProjectionProvider);
+                final projectionsForWeek = allProjections.where((p) => isSameDay(p.weekStartDate, weekStartDate) && p.projectedHours > 0);
+                if (projectionsForWeek.isNotEmpty) {
+                  Navigator.pop(context);
+                  showUpgradeDialog(
+                    context,
+                    title: "Upgrade for More Projections",
+                    message: "You can only set one projection per week on the Lite plan. Upgrade to Pro for unlimited projections.",
+                  );
+                  return;
+                }
+              }
+
               ref.read(siteProjectionProvider.notifier).setProjection(site.key.toString(), hours, weekStartDate);
               Navigator.pop(context);
             },

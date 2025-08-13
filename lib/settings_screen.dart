@@ -174,6 +174,36 @@ class SettingsScreen extends ConsumerWidget {
             onTap: () => _showBulkDeleteDialog(context, ref),
           ),
           const Divider(),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+            child: Text('Our Other Apps', style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+          ListTile(
+            leading: const Icon(Icons.timer_outlined, color: Colors.blue),
+            title: const Text('ClockEr'),
+            subtitle: const Text('Track employee clock-ins, outs, and timesheets with location data across numerous sites.'),
+            trailing: const Icon(Icons.open_in_new),
+            onTap: () {
+              // TODO: Add app store link for ClockEr
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Coming Soon!')),
+              );
+            },
+          ),
+          const SizedBox(height: 8),
+          ListTile(
+            leading: const Icon(Icons.cloud_sync_outlined, color: Colors.orange),
+            title: const Text('ScheduleLink'),
+            subtitle: const Text('The complete cloud solution, combining ClockEr and SchedulEr with real-time data sync.'),
+            trailing: const Icon(Icons.open_in_new),
+            onTap: () {
+              // TODO: Add app store link for ScheduleLink
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Coming Soon!')),
+              );
+            },
+          ),
+          const Divider(),
         ],
       ),
     );

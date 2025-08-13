@@ -8,6 +8,8 @@ import 'package:path_provider/path_provider.dart';
 import 'package:csv/csv.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
+import 'package:scheduler/providers/plan_provider.dart';
+import 'package:scheduler/widgets/upgrade_dialog.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:scheduler/report_service.dart';
 import 'package:scheduler/widgets/custom_app_bar.dart';
@@ -96,19 +98,47 @@ class ExportTimesheetsScreen extends ConsumerWidget {
     );
   }
 
-  Future<void> _generateAndShare(BuildContext context, String format) async {
+  Future<void> _generateAndShare(BuildContext context, WidgetRef ref, String format) async {
     try {
-      final DateTime? pickedDate = await showDatePicker(
+      // --- Restriction Logic ---
+      final settingsBox = Hive.box('settings');
+      final isPro = ref.read(planProvider);
+
+      if (!isPro) {
+        final firstLaunchString = settingsBox.get('firstLaunchDate');
+        final firstLaunchDate = DateTime.parse(firstLaunchString);
+        if (DateTime.now().difference(firstLaunchDate).inDays > 10) {
+          showUpgradeDialog(
+            context,
+            title: "Export Trial Ended",
+            message: "Your 10-day trial for exporting has ended. Upgrade to Pro to re-enable unlimited exports.",
+          );
+          return;
+        }
+      }
+
+      final DateTimeRange? pickedRange = await showDateRangePicker(
         context: context,
-        initialDate: DateTime.now(),
+        initialDateRange: DateTimeRange(
+          start: DateTime.now().subtract(const Duration(days: 3)),
+          end: DateTime.now(),
+        ),
         firstDate: DateTime(2020),
         lastDate: DateTime.now().add(const Duration(days: 365)),
       );
-      if (pickedDate == null) return;
+      if (pickedRange == null) return;
 
-      final startOfWeek = pickedDate.subtract(Duration(days: pickedDate.weekday - 1));
-      final endOfWeek = startOfWeek.add(const Duration(days: 6));
-      final reportDateRange = DateTimeRange(start: startOfWeek, end: endOfWeek);
+      if (!isPro && pickedRange.duration.inDays > 3) {
+        if (!context.mounted) return;
+        showUpgradeDialog(
+          context,
+          title: "Unlock Full Report Exporting",
+          message: "Exporting for more than 3 days requires Scheduler Pro. Upgrade now to get unlimited date ranges and full history.",
+        );
+        return;
+      }
+      // --- End of Restriction Logic ---
+
 
       if (!context.mounted) return;
       final List<String>? selectedStaffNames = await _showStaffFilterDialog(context);
@@ -123,19 +153,19 @@ class ExportTimesheetsScreen extends ConsumerWidget {
       final scheduleBox = Hive.box<ScheduleEntry>('schedule_entries');
       final staffBox = Hive.box<Staff>('staff');
 
-      final inclusiveEndDate = endOfWeek.add(const Duration(days: 1));
+      final inclusiveEndDate = pickedRange.end.add(const Duration(days: 1));
       final filteredEntries = scheduleBox.values.where((entry) {
         final staffMember = staffBox.get(entry.staffKey);
         if (staffMember == null) return false;
 
-        final isDateInRange = !entry.date.isBefore(startOfWeek) && entry.date.isBefore(inclusiveEndDate);
+        final isDateInRange = !entry.date.isBefore(pickedRange.start) && entry.date.isBefore(inclusiveEndDate);
         final isStaffSelected = selectedStaffNames.contains(staffMember.name);
         return isDateInRange && isStaffSelected;
       }).toList();
 
       if (filteredEntries.isEmpty) {
         if (!context.mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No schedule entries found for the selected week.')));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No schedule entries found for the selected date range.')));
         return;
       }
 
@@ -146,15 +176,15 @@ class ExportTimesheetsScreen extends ConsumerWidget {
       }
 
       final Directory dir = await getApplicationDocumentsDirectory();
-      final formattedSunday = DateFormat('ddMMyy').format(endOfWeek);
+      final formattedDate = DateFormat('ddMMyy').format(pickedRange.end);
 
       String fileName;
       if (format == 'pdf') {
-        fileName = 'weekly_schedule_we_${formattedSunday}manager.pdf';
+        fileName = 'schedule_report_${formattedDate}_manager.pdf';
       } else if (format == 'team_pdf') {
-        fileName = 'weekly_schedule_we_${formattedSunday}team.pdf';
+        fileName = 'schedule_report_${formattedDate}_team.pdf';
       } else {
-        fileName = 'weekly_schedule_we_${formattedSunday}manager.csv';
+        fileName = 'schedule_report_${formattedDate}_manager.csv';
       }
       final String path = '${dir.path}/$fileName';
 
@@ -164,9 +194,9 @@ class ExportTimesheetsScreen extends ConsumerWidget {
       if (format == 'csv') {
         await _generateCsv(path, groupedByStaff, siteBox);
       } else if (format == 'pdf') {
-        await _generateManagerPdf(path, groupedByStaff, siteBox, projectionBox, reportDateRange, filteredEntries, teamName);
+        await _generateManagerPdf(path, groupedByStaff, siteBox, projectionBox, pickedRange, filteredEntries, teamName);
       } else if (format == 'team_pdf') {
-        final pdfBytes = await generateTeamTimesheetPdfBytes(dateRange: reportDateRange, data: groupedByStaff, teamName: teamName);
+        final pdfBytes = await generateTeamTimesheetPdfBytes(dateRange: pickedRange, data: groupedByStaff, teamName: teamName);
         await File(path).writeAsBytes(pdfBytes);
       }
       if (!context.mounted) return;
@@ -174,7 +204,7 @@ class ExportTimesheetsScreen extends ConsumerWidget {
       if (box != null) {
         await Share.shareXFiles(
           [XFile(path)],
-          text: 'Scheduler Weekly Schedule',
+          text: 'Scheduler Schedule Report',
           sharePositionOrigin: box.localToGlobal(Offset.zero) & box.size,
         );
       }
@@ -250,7 +280,7 @@ class ExportTimesheetsScreen extends ConsumerWidget {
       contentWidgets.add(pw.Column(
         crossAxisAlignment: pw.CrossAxisAlignment.start,
         children: [
-          pw.Header(text: 'Weekly Schedule for $staffName'),
+          pw.Header(text: 'Schedule for $staffName'),
           pw.TableHelper.fromTextArray(
             headers: ['Site', 'Date', 'Start', 'Finish', 'Hours'],
             data: tableData,
@@ -305,7 +335,6 @@ class ExportTimesheetsScreen extends ConsumerWidget {
       cellAlignment: pw.Alignment.center,
     ));
 
-    // *** NEW: Logic to build the daily site summary table ***
     contentWidgets.add(pw.Divider(height: 30));
     contentWidgets.add(pw.Header(text: 'Daily Hours by Site Summary'));
 
@@ -314,7 +343,7 @@ class ExportTimesheetsScreen extends ConsumerWidget {
     for (int i = 0; i < 7; i++) {
       final day = startOfWeek.add(Duration(days: i));
       weekDays.add(day);
-      dailyHeaders.add(DateFormat.E().format(day)); // Mon, Tue, etc.
+      dailyHeaders.add(DateFormat.E().format(day));
     }
     dailyHeaders.add('Total');
 
@@ -342,7 +371,6 @@ class ExportTimesheetsScreen extends ConsumerWidget {
       headerDecoration: const pw.BoxDecoration(color: PdfColors.grey300),
       cellAlignment: pw.Alignment.center,
     ));
-    // *** End of new table logic ***
 
     pdf.addPage(pw.MultiPage(
       pageFormat: PdfPageFormat.a4.portrait,
@@ -353,7 +381,7 @@ class ExportTimesheetsScreen extends ConsumerWidget {
             child: pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.end,
                 children: [
-                  pw.Text('Manager Weekly Schedule', style: pw.Theme.of(context).header3),
+                  pw.Text('Manager Schedule Report', style: pw.Theme.of(context).header3),
                   if (teamName != null && teamName.isNotEmpty)
                     pw.Text('Team: $teamName', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
                 ]
@@ -387,24 +415,24 @@ class ExportTimesheetsScreen extends ConsumerWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Text('Manager Weekly Schedule (Detailed List)', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold)),
+              const Text('Manager Schedule (Detailed List)', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
               ElevatedButton.icon(
-                onPressed: () => _generateAndShare(context, 'pdf'),
+                onPressed: () => _generateAndShare(context, ref, 'pdf'),
                 icon: const Icon(Icons.picture_as_pdf),
                 label: const Text('Export Detailed PDF'),
               ),
               const SizedBox(height: 16),
               ElevatedButton.icon(
-                onPressed: () => _generateAndShare(context, 'csv'),
+                onPressed: () => _generateAndShare(context, ref, 'csv'),
                 icon: const Icon(Icons.table_chart),
                 label: const Text('Export Detailed CSV'),
               ),
               const Divider(height: 48, thickness: 1),
-              const Text('Team Weekly Schedule (Weekly Grid)', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold)),
+              const Text('Team Schedule (Grid View)', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
               ElevatedButton.icon(
-                onPressed: () => _generateAndShare(context, 'team_pdf'),
+                onPressed: () => _generateAndShare(context, ref, 'team_pdf'),
                 icon: const Icon(Icons.grid_on_outlined),
                 label: const Text('Export Team PDF'),
                 style: ElevatedButton.styleFrom(

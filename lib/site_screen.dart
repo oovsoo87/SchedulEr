@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:scheduler/models.dart';
+import 'package:scheduler/providers/plan_provider.dart';
 import 'package:scheduler/widgets/custom_app_bar.dart';
+import 'package:scheduler/widgets/upgrade_dialog.dart';
 
 // *** MODIFIED: Added more, lighter color options ***
 const List<Color> siteColors = [
@@ -134,7 +136,20 @@ class AddSiteScreen extends ConsumerWidget {
         },
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () => _showAddEditSiteDialog(context, ref),
+        onPressed: () {
+          final isPro = ref.read(planProvider);
+          final siteCount = ref.read(siteProvider).length;
+
+          if (!isPro && siteCount >= 1) {
+            showUpgradeDialog(
+              context,
+              title: "Upgrade to Pro for Unlimited Sites",
+              message: "You've reached the 1-site limit on Scheduler Lite. Upgrade to Pro to add unlimited sites and unlock more features.",
+            );
+          } else {
+            _showAddEditSiteDialog(context, ref);
+          }
+        },
         child: const Icon(Icons.add),
       ),
     );
