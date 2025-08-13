@@ -256,7 +256,7 @@ class AddSiteScreen extends ConsumerWidget {
                         groupName: groupNameController.text.trim(),
                         address: addressController.text.trim(),
                         notes: notesController.text.trim(),
-                        colorValue: selectedColor.value,
+                        colorValue: selectedColor.toARGB32(),
                         orderIndex: site?.orderIndex ?? 0,
                         presetStartTime: presetStartTime != null ? '${presetStartTime!.hour}:${presetStartTime!.minute}' : null,
                         presetFinishTime: presetFinishTime != null ? '${presetFinishTime!.hour}:${presetFinishTime!.minute}' : null,

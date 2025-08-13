@@ -104,6 +104,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final nextDay = entry.date.add(const Duration(days: 1));
     final staffName = Hive.box<Staff>('staff').get(entry.staffKey)?.name ?? 'this shift';
 
+    if (!mounted) return;
     final bool? confirmed = await showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -196,7 +197,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             },
             calendarStyle: CalendarStyle(
               todayDecoration: BoxDecoration(
-                color: Theme.of(context).primaryColor.withOpacity(0.5),
+                color: Theme.of(context).primaryColor.withAlpha(128),
                 shape: BoxShape.circle,
               ),
               selectedDecoration: BoxDecoration(
@@ -262,7 +263,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 final site = Hive.box<Site>('sites').get(event.siteKey);
 
                 return ListTile(
-                  tileColor: index.isEven ? null : Theme.of(context).colorScheme.surface.withOpacity(0.5),
+                  tileColor: index.isEven ? null : Theme.of(context).colorScheme.surface.withAlpha(128),
                   leading: CircleAvatar(backgroundColor: site != null ? Color(site.colorValue) : Colors.grey, radius: 5),
                   title: Text(staff?.name ?? 'Unknown Staff'),
                   subtitle: Text(site?.name ?? 'Unknown Site'),
@@ -333,7 +334,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         return AlertDialog(
           title: Text(entry != null ? 'Edit Schedule' : 'Add Schedule'),
           content: _AddEditScheduleDialogContent(
-            ref: ref,
             selectedDate: selectedDate,
             entry: entry,
           ),
@@ -343,22 +343,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 }
 
-class _AddEditScheduleDialogContent extends StatefulWidget {
-  final WidgetRef ref;
+class _AddEditScheduleDialogContent extends ConsumerStatefulWidget {
   final DateTime selectedDate;
   final ScheduleEntry? entry;
 
   const _AddEditScheduleDialogContent({
-    required this.ref,
     required this.selectedDate,
     this.entry,
   });
 
   @override
-  State<_AddEditScheduleDialogContent> createState() => _AddEditScheduleDialogContentState();
+  ConsumerState<_AddEditScheduleDialogContent> createState() => _AddEditScheduleDialogContentState();
 }
 
-class _AddEditScheduleDialogContentState extends State<_AddEditScheduleDialogContent> {
+class _AddEditScheduleDialogContentState extends ConsumerState<_AddEditScheduleDialogContent> {
   late bool isEditing;
   late int? selectedStaffKey;
   late int? selectedSiteKey;
@@ -385,12 +383,12 @@ class _AddEditScheduleDialogContentState extends State<_AddEditScheduleDialogCon
   }
 
   Future<void> onSave() async {
-    if (!mounted) return;
-    if (formKey.currentState!.validate()) {
+    if (formKey.currentState?.validate() ?? false) {
       final newStartTime = DateTime(widget.selectedDate.year, widget.selectedDate.month, widget.selectedDate.day, startTime.hour, startTime.minute);
       final newFinishTime = DateTime(widget.selectedDate.year, widget.selectedDate.month, widget.selectedDate.day, finishTime.hour, finishTime.minute);
 
       if (!newFinishTime.isAfter(newStartTime)) {
+        if (!context.mounted) return;
         showDialog(context: context, builder: (context) => AlertDialog(
           title: const Text('Invalid Time'),
           content: const Text('The finish time must be after the start time.'),
@@ -399,7 +397,7 @@ class _AddEditScheduleDialogContentState extends State<_AddEditScheduleDialogCon
         return;
       }
 
-      final allEntries = widget.ref.read(scheduleProvider);
+      final allEntries = ref.read(scheduleProvider);
       final conflictingShifts = allEntries.where((e) {
         return e.staffKey == selectedStaffKey &&
             isSameDay(e.date, widget.selectedDate) &&
@@ -408,7 +406,7 @@ class _AddEditScheduleDialogContentState extends State<_AddEditScheduleDialogCon
 
       for (final existingShift in conflictingShifts) {
         if (newStartTime.isBefore(existingShift.finishTime) && newFinishTime.isAfter(existingShift.startTime)) {
-          if (!mounted) return;
+          if (!context.mounted) return;
           showDialog(context: context, builder: (context) => AlertDialog(
             title: const Text('Schedule Conflict'),
             content: const Text('This staff member is already scheduled for an overlapping shift at this time.'),
@@ -429,7 +427,7 @@ class _AddEditScheduleDialogContentState extends State<_AddEditScheduleDialogCon
         final potentialTotalHours = (currentScheduledSeconds + newShiftSeconds) / 3600;
 
         if (potentialTotalHours > siteProjection.projectedHours) {
-          if (!mounted) return;
+          if (!context.mounted) return;
           final confirmed = await showDialog<bool>(context: context, builder: (context) => AlertDialog(
             title: const Text('Projection Warning'),
             content: Text('This shift will cause the site to be overscheduled for the week.\n\nProjected: ${siteProjection.projectedHours.toStringAsFixed(1)} hrs\nScheduled: ${potentialTotalHours.toStringAsFixed(1)} hrs\n\nSave anyway?'),
@@ -452,41 +450,33 @@ class _AddEditScheduleDialogContentState extends State<_AddEditScheduleDialogCon
       );
 
       if (isEditing) {
-        widget.ref.read(scheduleProvider.notifier).updateScheduleEntry(widget.entry!.key, newEntry);
+        ref.read(scheduleProvider.notifier).updateScheduleEntry(widget.entry!.key, newEntry);
       } else {
-        widget.ref.read(scheduleProvider.notifier).addScheduleEntry(newEntry);
+        ref.read(scheduleProvider.notifier).addScheduleEntry(newEntry);
       }
-      if (mounted) Navigator.pop(context);
+      if (!context.mounted) return;
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final staffList = widget.ref.read(staffProvider);
-    final siteList = widget.ref.read(siteProvider);
-
     return Form(
       key: formKey,
       child: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            DropdownButtonFormField<int>(
-              value: selectedStaffKey,
-              hint: const Text('Select Staff'),
-              items: staffList.map((staff) => DropdownMenuItem(value: staff.key as int, child: Text(staff.name))).toList(),
+            _StaffDropdown(
+              selectedStaffKey: selectedStaffKey,
               onChanged: (value) => setState(() => selectedStaffKey = value),
-              validator: (value) => value == null ? 'Please select staff' : null,
             ),
-            DropdownButtonFormField<int>(
-              value: selectedSiteKey,
-              hint: const Text('Select Site'),
-              items: siteList.map((site) => DropdownMenuItem(value: site.key as int, child: Text(site.name))).toList(),
+            _SiteDropdown(
+              selectedSiteKey: selectedSiteKey,
               onChanged: (value) {
                 setState(() {
                   selectedSiteKey = value;
                   if (value != null && !isEditing) {
-                    final site = siteList.firstWhere((s) => s.key == value);
+                    final site = ref.read(siteProvider).firstWhere((s) => s.key == value);
                     if (site.presetStartTime != null && site.presetStartTime!.isNotEmpty) {
                       final parts = site.presetStartTime!.split(':');
                       startTime = TimeOfDay(hour: int.parse(parts[0]), minute: int.parse(parts[1]));
@@ -498,74 +488,178 @@ class _AddEditScheduleDialogContentState extends State<_AddEditScheduleDialogCon
                   }
                 });
               },
-              validator: (value) => value == null ? 'Please select a site' : null,
             ),
             const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                Column(children: [
-                  const Text('Start Time'),
-                  ElevatedButton(
-                    onPressed: () async {
-                      final time = await showTimePicker(context: context, initialTime: startTime);
-                      if (time != null) {
-                        setState(() => startTime = time);
-                        if (mounted) {
-                          final finish = await showTimePicker(context: context, initialTime: finishTime);
-                          if (finish != null) setState(() => finishTime = finish);
-                        }
-                      }
-                    },
-                    child: Text(startTime.format(context)),
-                  ),
-                ]),
-                Column(children: [
-                  const Text('Finish Time'),
-                  ElevatedButton(
-                    onPressed: () async {
-                      final time = await showTimePicker(context: context, initialTime: finishTime);
-                      if (time != null) setState(() => finishTime = time);
-                    },
-                    child: Text(finishTime.format(context)),
-                  ),
-                ]),
-              ],
+            _TimePickerButtons(
+              startTime: startTime,
+              finishTime: finishTime,
+              onStartTimePressed: () async {
+                final time = await showTimePicker(context: context, initialTime: startTime);
+                if (time != null) {
+                  setState(() => startTime = time);
+                  if (!context.mounted) return;
+                  final finish = await showTimePicker(context: context, initialTime: finishTime);
+                  if (finish != null) setState(() => finishTime = finish);
+                }
+              },
+              onFinishTimePressed: () async {
+                final time = await showTimePicker(context: context, initialTime: finishTime);
+                if (time != null) setState(() => finishTime = time);
+              },
             ),
             const SizedBox(height: 8),
-            TextFormField(
-              controller: notesController,
-              decoration: const InputDecoration(labelText: 'Notes (Optional)'),
-              textCapitalization: TextCapitalization.sentences,
-            ),
+            _NotesTextField(controller: notesController),
             const SizedBox(height: 16),
-            Row(
-              children: [
-                if (isEditing) IconButton(
-                  icon: const Icon(Icons.delete, color: Colors.redAccent),
-                  onPressed: () async {
-                    final confirmed = await showDialog<bool>(context: context, builder: (context) => AlertDialog(
-                      title: const Text('Confirm Deletion'),
-                      content: const Text('Delete this schedule entry?'),
-                      actions: [
-                        TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-                        TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Delete', style: TextStyle(color: Colors.redAccent))),
-                      ],
-                    ));
-                    if (confirmed == true) {
-                      widget.ref.read(scheduleProvider.notifier).deleteScheduleEntry(widget.entry!.key);
-                      if (mounted) Navigator.pop(context);
-                    }
-                  },
-                ),
-                const Spacer(),
-                TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-                ElevatedButton(onPressed: onSave, child: const Text('Save')),
-              ],
-            )
+            _DialogActions(
+              isEditing: isEditing,
+              onCancel: () => Navigator.pop(context),
+              onSave: onSave,
+              onDelete: () async {
+                final confirmed = await showDialog<bool>(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    title: const Text('Confirm Deletion'),
+                    content: const Text('Delete this schedule entry?'),
+                    actions: [
+                      TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+                      TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Delete', style: TextStyle(color: Colors.redAccent))),
+                    ],
+                  ),
+                );
+                if (confirmed == true) {
+                  ref.read(scheduleProvider.notifier).deleteScheduleEntry(widget.entry!.key);
+                  if (!context.mounted) return;
+                  Navigator.pop(context);
+                }
+              },
+            ),
           ],
         ),
       ),
+    );
+  }
+}
+
+class _StaffDropdown extends ConsumerWidget {
+  final int? selectedStaffKey;
+  final ValueChanged<int?> onChanged;
+
+  const _StaffDropdown({required this.selectedStaffKey, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final staffList = ref.watch(staffProvider);
+    return DropdownButtonFormField<int>(
+      value: selectedStaffKey,
+      hint: const Text('Select Staff'),
+      items: staffList.map((staff) => DropdownMenuItem(value: staff.key as int, child: Text(staff.name))).toList(),
+      onChanged: onChanged,
+      validator: (value) => value == null ? 'Please select staff' : null,
+    );
+  }
+}
+
+class _SiteDropdown extends ConsumerWidget {
+  final int? selectedSiteKey;
+  final ValueChanged<int?> onChanged;
+
+  const _SiteDropdown({required this.selectedSiteKey, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final siteList = ref.watch(siteProvider);
+    return DropdownButtonFormField<int>(
+      value: selectedSiteKey,
+      hint: const Text('Select Site'),
+      items: siteList.map((site) => DropdownMenuItem(value: site.key as int, child: Text(site.name))).toList(),
+      onChanged: onChanged,
+      validator: (value) => value == null ? 'Please select a site' : null,
+    );
+  }
+}
+
+class _TimePickerButtons extends StatelessWidget {
+  final TimeOfDay startTime;
+  final TimeOfDay finishTime;
+  final VoidCallback onStartTimePressed;
+  final VoidCallback onFinishTimePressed;
+
+  const _TimePickerButtons({
+    required this.startTime,
+    required this.finishTime,
+    required this.onStartTimePressed,
+    required this.onFinishTimePressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceAround,
+      children: [
+        Column(
+          children: [
+            const Text('Start Time'),
+            ElevatedButton(
+              onPressed: onStartTimePressed,
+              child: Text(startTime.format(context)),
+            ),
+          ],
+        ),
+        Column(
+          children: [
+            const Text('Finish Time'),
+            ElevatedButton(
+              onPressed: onFinishTimePressed,
+              child: Text(finishTime.format(context)),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _NotesTextField extends StatelessWidget {
+  final TextEditingController controller;
+
+  const _NotesTextField({required this.controller});
+
+  @override
+  Widget build(BuildContext context) {
+    return TextFormField(
+      controller: controller,
+      decoration: const InputDecoration(labelText: 'Notes (Optional)'),
+      textCapitalization: TextCapitalization.sentences,
+    );
+  }
+}
+
+class _DialogActions extends StatelessWidget {
+  final bool isEditing;
+  final VoidCallback onCancel;
+  final VoidCallback onSave;
+  final VoidCallback onDelete;
+
+  const _DialogActions({
+    required this.isEditing,
+    required this.onCancel,
+    required this.onSave,
+    required this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        if (isEditing)
+          IconButton(
+            icon: const Icon(Icons.delete, color: Colors.redAccent),
+            onPressed: onDelete,
+          ),
+        const Spacer(),
+        TextButton(onPressed: onCancel, child: const Text('Cancel')),
+        ElevatedButton(onPressed: onSave, child: const Text('Save')),
+      ],
     );
   }
 }

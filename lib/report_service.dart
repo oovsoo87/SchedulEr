@@ -37,13 +37,17 @@ Future<Uint8List> generateTeamTimesheetPdfBytes({
         row.add('');
       } else {
         final cellText = entriesForDay.map((e) {
-          final siteName = siteBox.get(e.siteKey)?.name ?? 'N/A';
-          final siteColorValue = siteBox.get(e.siteKey)?.colorValue ?? Colors.grey.value;
-          final flutterColor = Color(siteColorValue);
-          final transparentColor = PdfColor(flutterColor.red / 255, flutterColor.green / 255, flutterColor.blue / 255, 0.2);
+          final siteColorValue = siteBox.get(e.siteKey)?.colorValue ?? Colors.grey.toARGB32();
 
+          // Create a transparent version of the color
+          const int alpha = 51; // ~20% opacity (0.2 * 255)
+          final int transparentColorValue = (alpha << 24) | (siteColorValue & 0x00FFFFFF);
+          final transparentColor = PdfColor.fromInt(transparentColorValue);
+
+          final siteName = siteBox.get(e.siteKey)?.name ?? 'N/A';
           final startTime = DateFormat.Hm().format(e.startTime);
           final finishTime = DateFormat.Hm().format(e.finishTime);
+
           return pw.Container(
               padding: const pw.EdgeInsets.all(2),
               margin: const pw.EdgeInsets.only(bottom: 2),

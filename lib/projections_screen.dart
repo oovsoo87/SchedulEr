@@ -203,7 +203,7 @@ class TableView extends ConsumerWidget {
           children: sitesInGroup.map((data) {
             final siteDiffColor = _getDiffColor(data.difference);
             return ListTile(
-              tileColor: Theme.of(context).colorScheme.surface.withOpacity(0.5),
+              tileColor: Theme.of(context).colorScheme.surface.withAlpha(128),
               title: Row(
                 children: [
                   Expanded(flex: 3, child: Padding(padding: const EdgeInsets.only(left: 16.0), child: Text(data.site.name, overflow: TextOverflow.ellipsis))),

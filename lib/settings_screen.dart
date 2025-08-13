@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:hive/hive.dart';
 import 'package:scheduler/home_screen.dart';
 import 'package:scheduler/main.dart';
 import 'package:scheduler/widgets/custom_app_bar.dart';
@@ -21,6 +22,7 @@ class SettingsScreen extends ConsumerWidget {
     );
     if (confirmedProceed != true) return;
 
+    if (!context.mounted) return;
     final range = await showDateRangePicker(
       context: context,
       firstDate: DateTime(2020),
@@ -35,10 +37,12 @@ class SettingsScreen extends ConsumerWidget {
     }).toList();
 
     if (entriesToDelete.isEmpty) {
+      if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No schedule entries found in that date range.')));
       return;
     }
 
+    if (!context.mounted) return;
     final confirmedDelete = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -58,8 +62,84 @@ class SettingsScreen extends ConsumerWidget {
     if (confirmedDelete == true) {
       final keysToDelete = entriesToDelete.map((e) => e.key);
       await ref.read(scheduleProvider.notifier).deleteMultipleEntries(keysToDelete);
+      if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${keysToDelete.length} entries deleted.'), backgroundColor: Colors.green));
     }
+  }
+
+  Future<void> _showChangePasswordDialog(BuildContext context) async {
+    final formKey = GlobalKey<FormState>();
+    final currentPasswordController = TextEditingController();
+    final newPasswordController = TextEditingController();
+    final confirmPasswordController = TextEditingController();
+    final settingsBox = Hive.box('settings');
+
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Change Passcode'),
+        content: Form(
+          key: formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextFormField(
+                controller: currentPasswordController,
+                obscureText: true,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'Current Passcode'),
+                validator: (value) {
+                  final storedPassword = settingsBox.get('password', defaultValue: '1987');
+                  if (value != storedPassword) {
+                    return 'Incorrect passcode';
+                  }
+                  return null;
+                },
+              ),
+              TextFormField(
+                controller: newPasswordController,
+                obscureText: true,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'New Passcode'),
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Please enter a new passcode';
+                  }
+                  return null;
+                },
+              ),
+              TextFormField(
+                controller: confirmPasswordController,
+                obscureText: true,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'Confirm New Passcode'),
+                validator: (value) {
+                  if (value != newPasswordController.text) {
+                    return 'Passcodes do not match';
+                  }
+                  return null;
+                },
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () {
+              if (formKey.currentState!.validate()) {
+                settingsBox.put('password', newPasswordController.text);
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Passcode changed successfully!'), backgroundColor: Colors.green),
+                );
+              }
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -79,6 +159,12 @@ class SettingsScreen extends ConsumerWidget {
               ref.read(themeProvider.notifier).toggleTheme(value);
             },
             secondary: Icon(isDarkMode ? Icons.dark_mode_outlined : Icons.light_mode_outlined),
+          ),
+          const Divider(),
+          ListTile(
+            leading: const Icon(Icons.lock_outline),
+            title: const Text('Change Passcode'),
+            onTap: () => _showChangePasswordDialog(context),
           ),
           const Divider(),
           ListTile(

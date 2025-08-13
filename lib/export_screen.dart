@@ -97,81 +97,93 @@ class ExportTimesheetsScreen extends ConsumerWidget {
   }
 
   Future<void> _generateAndShare(BuildContext context, String format) async {
-    final DateTime? pickedDate = await showDatePicker(
-      context: context,
-      initialDate: DateTime.now(),
-      firstDate: DateTime(2020),
-      lastDate: DateTime.now().add(const Duration(days: 365)),
-    );
-    if (pickedDate == null) return;
+    try {
+      final DateTime? pickedDate = await showDatePicker(
+        context: context,
+        initialDate: DateTime.now(),
+        firstDate: DateTime(2020),
+        lastDate: DateTime.now().add(const Duration(days: 365)),
+      );
+      if (pickedDate == null) return;
 
-    final startOfWeek = pickedDate.subtract(Duration(days: pickedDate.weekday - 1));
-    final endOfWeek = startOfWeek.add(const Duration(days: 6));
-    final reportDateRange = DateTimeRange(start: startOfWeek, end: endOfWeek);
+      final startOfWeek = pickedDate.subtract(Duration(days: pickedDate.weekday - 1));
+      final endOfWeek = startOfWeek.add(const Duration(days: 6));
+      final reportDateRange = DateTimeRange(start: startOfWeek, end: endOfWeek);
 
-    final List<String>? selectedStaffNames = await _showStaffFilterDialog(context);
-    if (selectedStaffNames == null || selectedStaffNames.isEmpty) return;
+      if (!context.mounted) return;
+      final List<String>? selectedStaffNames = await _showStaffFilterDialog(context);
+      if (selectedStaffNames == null || selectedStaffNames.isEmpty) return;
 
-    String? teamName;
-    if (format == 'pdf' || format == 'team_pdf') {
-      teamName = await _showTeamNameDialog(context);
+      String? teamName;
+      if (format == 'pdf' || format == 'team_pdf') {
+        if (!context.mounted) return;
+        teamName = await _showTeamNameDialog(context);
+      }
+
+      final scheduleBox = Hive.box<ScheduleEntry>('schedule_entries');
+      final staffBox = Hive.box<Staff>('staff');
+
+      final inclusiveEndDate = endOfWeek.add(const Duration(days: 1));
+      final filteredEntries = scheduleBox.values.where((entry) {
+        final staffMember = staffBox.get(entry.staffKey);
+        if (staffMember == null) return false;
+
+        final isDateInRange = !entry.date.isBefore(startOfWeek) && entry.date.isBefore(inclusiveEndDate);
+        final isStaffSelected = selectedStaffNames.contains(staffMember.name);
+        return isDateInRange && isStaffSelected;
+      }).toList();
+
+      if (filteredEntries.isEmpty) {
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No schedule entries found for the selected week.')));
+        return;
+      }
+
+      final Map<String, List<ScheduleEntry>> groupedByStaff = {};
+      for (final entry in filteredEntries) {
+        final staffName = staffBox.get(entry.staffKey)!.name;
+        groupedByStaff.putIfAbsent(staffName, () => []).add(entry);
+      }
+
+      final Directory dir = await getApplicationDocumentsDirectory();
+      final formattedSunday = DateFormat('ddMMyy').format(endOfWeek);
+
+      String fileName;
+      if (format == 'pdf') {
+        fileName = 'weekly_schedule_we_${formattedSunday}manager.pdf';
+      } else if (format == 'team_pdf') {
+        fileName = 'weekly_schedule_we_${formattedSunday}team.pdf';
+      } else {
+        fileName = 'weekly_schedule_we_${formattedSunday}manager.csv';
+      }
+      final String path = '${dir.path}/$fileName';
+
+      final siteBox = Hive.box<Site>('sites');
+      final projectionBox = Hive.box<SiteProjection>('site_projections');
+
+      if (format == 'csv') {
+        await _generateCsv(path, groupedByStaff, siteBox);
+      } else if (format == 'pdf') {
+        await _generateManagerPdf(path, groupedByStaff, siteBox, projectionBox, reportDateRange, filteredEntries, teamName);
+      } else if (format == 'team_pdf') {
+        final pdfBytes = await generateTeamTimesheetPdfBytes(dateRange: reportDateRange, data: groupedByStaff, teamName: teamName);
+        await File(path).writeAsBytes(pdfBytes);
+      }
+      if (!context.mounted) return;
+      final box = context.findRenderObject() as RenderBox?;
+      if (box != null) {
+        await Share.shareXFiles(
+          [XFile(path)],
+          text: 'Scheduler Weekly Schedule',
+          sharePositionOrigin: box.localToGlobal(Offset.zero) & box.size,
+        );
+      }
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('An error occurred: $e'), backgroundColor: Colors.red),
+      );
     }
-
-    final scheduleBox = Hive.box<ScheduleEntry>('schedule_entries');
-    final staffBox = Hive.box<Staff>('staff');
-
-    final inclusiveEndDate = endOfWeek.add(const Duration(days: 1));
-    final filteredEntries = scheduleBox.values.where((entry) {
-      final staffMember = staffBox.get(entry.staffKey);
-      if (staffMember == null) return false;
-
-      final isDateInRange = !entry.date.isBefore(startOfWeek) && entry.date.isBefore(inclusiveEndDate);
-      final isStaffSelected = selectedStaffNames.contains(staffMember.name);
-      return isDateInRange && isStaffSelected;
-    }).toList();
-
-    if (filteredEntries.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No schedule entries found for the selected week.')));
-      return;
-    }
-
-    final Map<String, List<ScheduleEntry>> groupedByStaff = {};
-    for (final entry in filteredEntries) {
-      final staffName = staffBox.get(entry.staffKey)!.name;
-      groupedByStaff.putIfAbsent(staffName, () => []).add(entry);
-    }
-
-    final Directory dir = await getApplicationDocumentsDirectory();
-    final formattedSunday = DateFormat('ddMMyy').format(endOfWeek);
-
-    String fileName;
-    if (format == 'pdf') {
-      fileName = 'weekly_schedule_we_${formattedSunday}manager.pdf';
-    } else if (format == 'team_pdf') {
-      fileName = 'weekly_schedule_we_${formattedSunday}team.pdf';
-    } else {
-      fileName = 'weekly_schedule_we_${formattedSunday}manager.csv';
-    }
-    final String path = '${dir.path}/$fileName';
-
-    final siteBox = Hive.box<Site>('sites');
-    final projectionBox = Hive.box<SiteProjection>('site_projections');
-
-    if (format == 'csv') {
-      await _generateCsv(path, groupedByStaff, siteBox);
-    } else if (format == 'pdf') {
-      await _generateManagerPdf(path, groupedByStaff, siteBox, projectionBox, reportDateRange, filteredEntries, teamName);
-    } else if (format == 'team_pdf') {
-      final pdfBytes = await generateTeamTimesheetPdfBytes(dateRange: reportDateRange, data: groupedByStaff, teamName: teamName);
-      await File(path).writeAsBytes(pdfBytes);
-    }
-
-    final box = context.findRenderObject() as RenderBox?;
-    await Share.shareXFiles(
-      [XFile(path)],
-      text: 'Scheduler Weekly Schedule',
-      sharePositionOrigin: box!.localToGlobal(Offset.zero) & box.size,
-    );
   }
 
   Future<void> _generateCsv(String path, Map<String, List<ScheduleEntry>> data, Box<Site> siteBox) async {
@@ -239,7 +251,7 @@ class ExportTimesheetsScreen extends ConsumerWidget {
         crossAxisAlignment: pw.CrossAxisAlignment.start,
         children: [
           pw.Header(text: 'Weekly Schedule for $staffName'),
-          pw.Table.fromTextArray(
+          pw.TableHelper.fromTextArray(
             headers: ['Site', 'Date', 'Start', 'Finish', 'Hours'],
             data: tableData,
             headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
@@ -285,7 +297,7 @@ class ExportTimesheetsScreen extends ConsumerWidget {
       ]);
     }
 
-    contentWidgets.add(pw.Table.fromTextArray(
+    contentWidgets.add(pw.TableHelper.fromTextArray(
       headers: ['Site', 'Projected', 'Scheduled', 'Difference'],
       data: summaryData,
       headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
@@ -323,7 +335,7 @@ class ExportTimesheetsScreen extends ConsumerWidget {
       dailySiteData.add(row);
     }
 
-    contentWidgets.add(pw.Table.fromTextArray(
+    contentWidgets.add(pw.TableHelper.fromTextArray(
       headers: dailyHeaders,
       data: dailySiteData,
       headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),

@@ -42,6 +42,12 @@ Future<void> main() async {
   await Hive.openBox<SiteProjection>('site_projections');
   await Hive.openBox('settings');
 
+  // **NEW**: Check for and store the first launch date for the trial period
+  final settingsBox = Hive.box('settings');
+  if (settingsBox.get('firstLaunchDate') == null) {
+    settingsBox.put('firstLaunchDate', DateTime.now().toIso8601String());
+  }
+
   runApp(Phoenix(child: const ProviderScope(child: SchedulerApp())));
 }
 
@@ -123,11 +129,14 @@ class PasswordScreen extends StatefulWidget {
 
 class _PasswordScreenState extends State<PasswordScreen> {
   final TextEditingController _passwordController = TextEditingController();
+  final Box _settingsBox = Hive.box('settings');
+
   void _login() {
-    if (_passwordController.text == '1987') {
+    final storedPassword = _settingsBox.get('password', defaultValue: '1987');
+    if (_passwordController.text == storedPassword) {
       Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const MainScreen()));
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Incorrect Password'), backgroundColor: Colors.redAccent));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Incorrect Passcode'), backgroundColor: Colors.redAccent));
     }
   }
 
@@ -149,7 +158,7 @@ class _PasswordScreenState extends State<PasswordScreen> {
                   obscureText: true,
                   keyboardType: TextInputType.number,
                   textAlign: TextAlign.center,
-                  decoration: const InputDecoration(labelText: 'Enter Password'),
+                  decoration: const InputDecoration(labelText: 'Enter Passcode'),
                   onSubmitted: (_) => _login(),
                 ),
               ),
