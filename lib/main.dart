@@ -164,6 +164,11 @@ class _PasswordScreenState extends State<PasswordScreen> {
               ),
               const SizedBox(height: 24),
               ElevatedButton(onPressed: _login, child: const Text('Login')),
+              const SizedBox(height: 16),
+              const Text(
+                'Default passcode: 1987',
+                style: TextStyle(color: Colors.grey, fontSize: 12),
+              ),
             ],
           ),
         ),

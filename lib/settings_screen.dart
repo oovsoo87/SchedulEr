@@ -4,9 +4,21 @@ import 'package:hive/hive.dart';
 import 'package:scheduler/home_screen.dart';
 import 'package:scheduler/main.dart';
 import 'package:scheduler/widgets/custom_app_bar.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
+
+  // Helper function to launch URLs
+  Future<void> _launchURL(BuildContext context, String url) async {
+    final Uri uri = Uri.parse(url);
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not launch $url')),
+      );
+    }
+  }
 
   Future<void> _showBulkDeleteDialog(BuildContext context, WidgetRef ref) async {
     final confirmedProceed = await showDialog<bool>(
@@ -22,7 +34,9 @@ class SettingsScreen extends ConsumerWidget {
     );
     if (confirmedProceed != true) return;
 
+    // This check ensures the context is still valid after the first await.
     if (!context.mounted) return;
+
     final range = await showDateRangePicker(
       context: context,
       firstDate: DateTime(2020),
@@ -73,6 +87,8 @@ class SettingsScreen extends ConsumerWidget {
     final newPasswordController = TextEditingController();
     final confirmPasswordController = TextEditingController();
     final settingsBox = Hive.box('settings');
+    final navigator = Navigator.of(context);
+    final messenger = ScaffoldMessenger.of(context);
 
     await showDialog(
       context: context,
@@ -129,8 +145,8 @@ class SettingsScreen extends ConsumerWidget {
             onPressed: () {
               if (formKey.currentState!.validate()) {
                 settingsBox.put('password', newPasswordController.text);
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
+                navigator.pop();
+                messenger.showSnackBar(
                   const SnackBar(content: Text('Passcode changed successfully!'), backgroundColor: Colors.green),
                 );
               }
@@ -146,6 +162,9 @@ class SettingsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final themeMode = ref.watch(themeProvider);
     final isDarkMode = themeMode == ThemeMode.dark;
+
+    const clockerUrl = 'https://play.google.com/store/apps/details?id=com.oovshoo.clocker';
+    const scheduleLinkUrl = 'https://play.google.com/store/apps/details?id=com.oovshoo.schedulelink';
 
     return Scaffold(
       appBar: const CustomAppBar(title: 'Settings', actions: []),
@@ -183,12 +202,7 @@ class SettingsScreen extends ConsumerWidget {
             title: const Text('ClockEr'),
             subtitle: const Text('Track employee clock-ins, outs, and timesheets with location data across numerous sites.'),
             trailing: const Icon(Icons.open_in_new),
-            onTap: () {
-              // TODO: Add app store link for ClockEr
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Coming Soon!')),
-              );
-            },
+            onTap: () => _launchURL(context, clockerUrl),
           ),
           const SizedBox(height: 8),
           ListTile(
@@ -196,12 +210,7 @@ class SettingsScreen extends ConsumerWidget {
             title: const Text('ScheduleLink'),
             subtitle: const Text('The complete cloud solution, combining ClockEr and SchedulEr with real-time data sync.'),
             trailing: const Icon(Icons.open_in_new),
-            onTap: () {
-              // TODO: Add app store link for ScheduleLink
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Coming Soon!')),
-              );
-            },
+            onTap: () => _launchURL(context, scheduleLinkUrl),
           ),
           const Divider(),
         ],

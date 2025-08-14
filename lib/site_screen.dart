@@ -158,11 +158,14 @@ class AddSiteScreen extends ConsumerWidget {
   void _showAddEditSiteDialog(BuildContext context, WidgetRef ref, {Site? site}) {
     final isEditing = site != null;
     final nameController = TextEditingController(text: site?.name ?? '');
-    final groupNameController = TextEditingController(text: site?.groupName ?? '');
     final addressController = TextEditingController(text: site?.address ?? '');
     final notesController = TextEditingController(text: site?.notes ?? '');
     final formKey = GlobalKey<FormState>();
     Color selectedColor = isEditing ? Color(site.colorValue) : siteColors.first;
+
+    // New controllers for group selection
+    final newGroupController = TextEditingController();
+    String? selectedGroup = site?.groupName;
 
     TimeOfDay? presetStartTime;
     if (site?.presetStartTime != null) {
@@ -174,6 +177,10 @@ class AddSiteScreen extends ConsumerWidget {
       final parts = site!.presetFinishTime!.split(':');
       presetFinishTime = TimeOfDay(hour: int.parse(parts[0]), minute: int.parse(parts[1]));
     }
+
+    // Get the list of existing groups
+    final allSites = ref.read(siteProvider);
+    final existingGroups = allSites.map((s) => s.groupName).whereType<String>().where((g) => g.isNotEmpty).toSet().toList();
 
     showDialog(
       context: context,
@@ -197,9 +204,32 @@ class AddSiteScreen extends ConsumerWidget {
                           return null;
                         },
                       ),
-                      TextFormField(controller: groupNameController, decoration: const InputDecoration(labelText: 'Group Name (Optional)')),
                       TextFormField(controller: addressController, decoration: const InputDecoration(labelText: 'Address (Optional)')),
                       TextFormField(controller: notesController, decoration: const InputDecoration(labelText: 'Notes (Optional)')),
+
+                      const Divider(height: 30),
+                      const Text('Assign Group (Optional)'),
+                      if (existingGroups.isNotEmpty)
+                        ...existingGroups.map((group) => RadioListTile<String>(
+                          title: Text(group),
+                          value: group,
+                          groupValue: selectedGroup,
+                          onChanged: (value) {
+                            setState(() {
+                              selectedGroup = value;
+                              newGroupController.clear();
+                            });
+                          },
+                        )),
+                      TextFormField(
+                        controller: newGroupController,
+                        decoration: const InputDecoration(labelText: 'Or enter new group name'),
+                        onChanged: (value) {
+                          if (value.isNotEmpty) {
+                            setState(() => selectedGroup = null);
+                          }
+                        },
+                      ),
 
                       const Divider(height: 30),
                       const Text('Preset Shift Times (Optional)'),
@@ -251,7 +281,6 @@ class AddSiteScreen extends ConsumerWidget {
                     if (formKey.currentState!.validate()) {
                       final newName = nameController.text.trim();
 
-                      final allSites = ref.read(siteProvider);
                       final isDuplicate = allSites.any((s) {
                         if (isEditing && s.key == site.key) return false;
                         return s.name.toLowerCase() == newName.toLowerCase();
@@ -266,9 +295,14 @@ class AddSiteScreen extends ConsumerWidget {
                         return;
                       }
 
+                      String finalGroupName = newGroupController.text.trim();
+                      if (finalGroupName.isEmpty) {
+                        finalGroupName = selectedGroup ?? '';
+                      }
+
                       final newSite = Site(
                         name: newName,
-                        groupName: groupNameController.text.trim(),
+                        groupName: finalGroupName,
                         address: addressController.text.trim(),
                         notes: notesController.text.trim(),
                         colorValue: selectedColor.toARGB32(),

@@ -1,16 +1,23 @@
-# scheduler
+SchedulEr
+SchedulEr is a powerful, offline-first staff scheduling application designed for managers and small business owners. Built with Flutter, it provides an intuitive and reliable way to manage employee shifts, sites, and projections directly on your device.
 
-A new Flutter project.
+✨ Features
+SchedulEr is designed to be simple for small teams and powerful enough for growing businesses.
 
-## Getting Started
+Feature	Lite Version (Free)	Pro Version (Upgrade)
+Employees	Up to 5 employees	✅ Unlimited employees
+Sites	Up to 1 site	✅ Unlimited sites
+Add/Edit Schedules	✅ Full Capability	✅ Full Capability
+Add/Edit Projections	Limited (1 projection per week)	✅ Unlimited projections
+Export Schedules & Reports	Limited (3-day range, 10-day trial)	✅ Unlimited PDF & CSV exports with full history
+Offline Access	✅ Full Capability	✅ Full Capability
+Priority Support	❌	✅ Included
 
-This project is a starting point for a Flutter application.
+📲 Our Other Apps
+SchedulEr is part of an ecosystem of apps designed to streamline your business operations.
 
-A few resources to get you started if this is your first Flutter project:
+ClockEr: Keep track of employee clock-ins, outs, and timesheets with location data across numerous sites.
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+ScheduleLink: The complete cloud solution that combines ClockEr and SchedulEr, syncing all your data in real-time.
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+You can find links to these apps in the settings screen within SchedulEr.
