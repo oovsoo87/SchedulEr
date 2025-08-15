@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:hive_flutter/hive_flutter.dart';
@@ -6,6 +7,9 @@ import 'package:scheduler/export_screen.dart';
 import 'package:scheduler/home_screen.dart';
 import 'package:scheduler/models.dart';
 import 'package:scheduler/projections_screen.dart';
+import 'package:scheduler/providers/plan_provider.dart';
+import 'package:scheduler/services/iap_service.dart';
+import 'package:scheduler/set_passcode_screen.dart';
 import 'package:scheduler/site_screen.dart';
 import 'package:scheduler/staff_screen.dart';
 import 'package:flutter_phoenix/flutter_phoenix.dart';
@@ -29,6 +33,8 @@ class ThemeNotifier extends StateNotifier<ThemeMode> {
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+
   await Hive.initFlutter();
 
   Hive.registerAdapter(StaffAdapter());
@@ -42,17 +48,19 @@ Future<void> main() async {
   await Hive.openBox<SiteProjection>('site_projections');
   await Hive.openBox('settings');
 
-  // **NEW**: Check for and store the first launch date for the trial period
   final settingsBox = Hive.box('settings');
   if (settingsBox.get('firstLaunchDate') == null) {
     settingsBox.put('firstLaunchDate', DateTime.now().toIso8601String());
   }
 
-  runApp(Phoenix(child: const ProviderScope(child: SchedulerApp())));
+  final bool isPasscodeSet = settingsBox.get('passcode_set', defaultValue: false);
+
+  runApp(Phoenix(child: ProviderScope(child: SchedulerApp(isPasscodeSet: isPasscodeSet))));
 }
 
 class SchedulerApp extends ConsumerWidget {
-  const SchedulerApp({super.key});
+  final bool isPasscodeSet;
+  const SchedulerApp({super.key, required this.isPasscodeSet});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -116,7 +124,7 @@ class SchedulerApp extends ConsumerWidget {
             unselectedItemColor: Colors.grey,
           )
       ),
-      home: const PasswordScreen(),
+      home: isPasscodeSet ? const PasswordScreen() : const SetPasscodeScreen(),
     );
   }
 }
@@ -132,7 +140,7 @@ class _PasswordScreenState extends State<PasswordScreen> {
   final Box _settingsBox = Hive.box('settings');
 
   void _login() {
-    final storedPassword = _settingsBox.get('password', defaultValue: '1987');
+    final storedPassword = _settingsBox.get('password');
     if (_passwordController.text == storedPassword) {
       Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const MainScreen()));
     } else {
@@ -164,11 +172,6 @@ class _PasswordScreenState extends State<PasswordScreen> {
               ),
               const SizedBox(height: 24),
               ElevatedButton(onPressed: _login, child: const Text('Login')),
-              const SizedBox(height: 16),
-              const Text(
-                'Default passcode: 1987',
-                style: TextStyle(color: Colors.grey, fontSize: 12),
-              ),
             ],
           ),
         ),
@@ -177,14 +180,20 @@ class _PasswordScreenState extends State<PasswordScreen> {
   }
 }
 
-class MainScreen extends StatefulWidget {
+class MainScreen extends ConsumerStatefulWidget {
   const MainScreen({super.key});
   @override
-  State<MainScreen> createState() => _MainScreenState();
+  ConsumerState<MainScreen> createState() => _MainScreenState();
 }
 
-class _MainScreenState extends State<MainScreen> {
+class _MainScreenState extends ConsumerState<MainScreen> {
   int _selectedIndex = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    ref.read(iapServiceProvider).init();
+  }
 
   static const List<Widget> _screens = <Widget>[
     HomeScreen(),
@@ -200,8 +209,30 @@ class _MainScreenState extends State<MainScreen> {
     });
   }
 
+  void _showThankYouDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Upgrade Successful!"),
+        content: const Text("Thank you for upgrading! You now have access to all Pro features."),
+        actions: [
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    ref.listen<bool>(planProvider, (previous, next) {
+      if (next == true && (previous == false || previous == null)) {
+        _showThankYouDialog();
+      }
+    });
+
     return Scaffold(
       body: Center(
         child: _screens.elementAt(_selectedIndex),

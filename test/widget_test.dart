@@ -11,6 +11,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:scheduler/main.dart';
 import 'package:scheduler/models.dart';
+import 'package:scheduler/set_passcode_screen.dart';
 
 void main() {
   setUpAll(() async {
@@ -31,13 +32,29 @@ void main() {
     await Hive.openBox('settings');
   });
 
-  testWidgets('Password screen shows correctly', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const ProviderScope(child: SchedulerApp()));
+  testWidgets('Password screen shows correctly when passcode is set', (WidgetTester tester) async {
+    // Build our app with isPasscodeSet: true.
+    await tester.pumpWidget(const ProviderScope(
+      // The required isPasscodeSet parameter is now provided.
+      child: SchedulerApp(isPasscodeSet: true),
+    ));
 
-    // Verify that the password screen is displayed.
-    expect(find.text('Scheduler'), findsOneWidget); // App Title
+    // Verify that the regular password screen is displayed.
+    expect(find.byType(PasswordScreen), findsOneWidget);
     expect(find.text('Enter Passcode'), findsOneWidget); // Text field label
     expect(find.widgetWithText(ElevatedButton, 'Login'), findsOneWidget); // Login Button
+  });
+
+  testWidgets('Set Passcode screen shows correctly on first run', (WidgetTester tester) async {
+    // Build our app with isPasscodeSet: false.
+    await tester.pumpWidget(const ProviderScope(
+      child: SchedulerApp(isPasscodeSet: false),
+    ));
+
+    // Verify that the "Set Passcode" screen is displayed.
+    expect(find.byType(SetPasscodeScreen), findsOneWidget);
+    expect(find.text('Enter New Passcode'), findsOneWidget);
+    expect(find.text('Confirm Passcode'), findsOneWidget);
+    expect(find.widgetWithText(ElevatedButton, 'Save and Continue'), findsOneWidget);
   });
 }

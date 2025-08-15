@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive/hive.dart';
 import 'package:scheduler/home_screen.dart';
 import 'package:scheduler/main.dart';
+import 'package:scheduler/providers/plan_provider.dart';
+import 'package:scheduler/services/iap_service.dart';
 import 'package:scheduler/widgets/custom_app_bar.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -34,7 +36,6 @@ class SettingsScreen extends ConsumerWidget {
     );
     if (confirmedProceed != true) return;
 
-    // This check ensures the context is still valid after the first await.
     if (!context.mounted) return;
 
     final range = await showDateRangePicker(
@@ -162,6 +163,7 @@ class SettingsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final themeMode = ref.watch(themeProvider);
     final isDarkMode = themeMode == ThemeMode.dark;
+    final isPro = ref.watch(planProvider);
 
     const clockerUrl = 'https://play.google.com/store/apps/details?id=com.oovshoo.clocker';
     const scheduleLinkUrl = 'https://play.google.com/store/apps/details?id=com.oovshoo.schedulelink';
@@ -170,6 +172,19 @@ class SettingsScreen extends ConsumerWidget {
       appBar: const CustomAppBar(title: 'Settings', actions: []),
       body: ListView(
         children: [
+          if (!isPro)
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: ElevatedButton.icon(
+                icon: const Icon(Icons.star),
+                label: const Text('Upgrade to Pro'),
+                onPressed: () => ref.read(iapServiceProvider).buyProUpgrade(),
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  textStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ),
           SwitchListTile(
             title: const Text('Dark Mode'),
             subtitle: const Text('Switch between light and dark themes.'),

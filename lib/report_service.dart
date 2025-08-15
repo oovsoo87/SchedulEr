@@ -73,7 +73,7 @@ Future<Uint8List> generateTeamTimesheetPdfBytes({
           child: pw.Column(
               crossAxisAlignment: pw.CrossAxisAlignment.end,
               children: [
-                pw.Text('Team Weekly Schedule for Week Ending ${DateFormat('dd/MM/yy').format(endOfWeek)}', style: pw.Theme.of(context).header3),
+                pw.Text('Team Schedule for Week Ending ${DateFormat('dd/MM/yy').format(endOfWeek)}', style: pw.Theme.of(context).header3),
                 if (teamName != null && teamName.isNotEmpty)
                   pw.Text('Team: $teamName', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
               ]
@@ -84,14 +84,14 @@ Future<Uint8List> generateTeamTimesheetPdfBytes({
       pw.Table(
         border: pw.TableBorder.all(),
         columnWidths: {
-          0: const pw.FlexColumnWidth(2),
-          1: const pw.IntrinsicColumnWidth(),
-          2: const pw.IntrinsicColumnWidth(),
-          3: const pw.IntrinsicColumnWidth(),
-          4: const pw.IntrinsicColumnWidth(),
-          5: const pw.IntrinsicColumnWidth(),
-          6: const pw.IntrinsicColumnWidth(),
-          7: const pw.IntrinsicColumnWidth(),
+          0: const pw.FlexColumnWidth(1.5), // Staff Name column (narrower)
+          1: const pw.FlexColumnWidth(1),   // Monday (equal width)
+          2: const pw.FlexColumnWidth(1),   // Tuesday (equal width)
+          3: const pw.FlexColumnWidth(1),   // Wednesday (equal width)
+          4: const pw.FlexColumnWidth(1),   // Thursday (equal width)
+          5: const pw.FlexColumnWidth(1),   // Friday (equal width)
+          6: const pw.FlexColumnWidth(1),   // Saturday (equal width)
+          7: const pw.FlexColumnWidth(1),   // Sunday (equal width)
         },
         children: [
           pw.TableRow(

@@ -1,12 +1,11 @@
 import 'dart:async';
+import 'dart:developer';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:scheduler/providers/plan_provider.dart';
 
-// The Product ID you will set up in the Google Play Console.
 const String _proUpgradeId = 'scheduler_pro_upgrade';
 
-// Provider for our IAP Service
 final iapServiceProvider = Provider((ref) => IAPService(ref));
 
 class IAPService {
@@ -21,7 +20,7 @@ class IAPService {
     }, onDone: () {
       _subscription.cancel();
     }, onError: (error) {
-      // Handle errors here.
+      //
     });
   }
 
@@ -32,15 +31,13 @@ class IAPService {
   Future<void> buyProUpgrade() async {
     final ProductDetailsResponse response = await _inAppPurchase.queryProductDetails({_proUpgradeId});
     if (response.notFoundIDs.isNotEmpty) {
-      // Handle the error if the product is not found in the Play Store.
-      print('Product not found: ${_proUpgradeId}');
+      log('Product not found: $_proUpgradeId');
       return;
     }
 
     final ProductDetails productDetails = response.productDetails.first;
     final PurchaseParam purchaseParam = PurchaseParam(productDetails: productDetails);
 
-    // Use buyNonConsumable for a one-time upgrade.
     await _inAppPurchase.buyNonConsumable(purchaseParam: purchaseParam);
   }
 
@@ -49,17 +46,14 @@ class IAPService {
       if (purchaseDetails.status == PurchaseStatus.purchased) {
         _handleSuccessfulPurchase(purchaseDetails);
       } else if (purchaseDetails.status == PurchaseStatus.error) {
-        print("Purchase Error: ${purchaseDetails.error!}");
+        log("Purchase Error: ${purchaseDetails.error!}");
       }
     }
   }
 
   Future<void> _handleSuccessfulPurchase(PurchaseDetails purchaseDetails) async {
     if (purchaseDetails.productID == _proUpgradeId) {
-      // 1. Upgrade the user's plan by calling our provider.
       await _ref.read(planProvider.notifier).upgradeToPro();
-
-      // 2. Mark the purchase as complete with the Play Store.
       await _inAppPurchase.completePurchase(purchaseDetails);
     }
   }
